@@ -1,0 +1,20 @@
+model:
+  meta_architecture: LeNet5
+datasets:
+  train: ("MNIST_TRAIN",)
+  test: ("MNIST_TEST",)
+input:
+  do_normalize: False
+  min_size_train: (28,)
+  max_size_train: 28
+  min_size_test: 28
+  max_size_test: 28
+solver:
+  loss_function: "cross_entropy_loss"
+  metric_functions: ("accuracy",)
+  batch_size: 128
+  epochs: 10
+  trainer: mnist
+test:
+  batch_size: 128
+  evaluator: "mnist"

@@ -1,0 +1,10 @@
+matplotlib
+dl_ext
+yacs
+torchvision
+numpy
+torch
+termcolor
+tqdm
+Pillow
+tensorboardX
