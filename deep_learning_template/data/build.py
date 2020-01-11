@@ -9,9 +9,7 @@ from .transforms import build_transforms
 
 def build_dataset(dataset_list, transforms, dataset_catalog, is_train=True, ds_len=-1):
     if not isinstance(dataset_list, (list, tuple)):
-        raise RuntimeError(
-            "dataset_list should be a list of strings, got {}".format(dataset_list)
-        )
+        dataset_list = [dataset_list]
     datasets = []
     for dataset_name in dataset_list:
         data = dataset_catalog.get(dataset_name)
@@ -21,11 +19,9 @@ def build_dataset(dataset_list, transforms, dataset_catalog, is_train=True, ds_l
         args["transforms"] = transforms
         dataset = factory(**args)
         datasets.append(dataset)
-
     dataset = datasets[0]
-    if len(datasets) > 1:
+    if is_train and len(datasets) > 1:
         dataset = ConcatDataset(datasets)
-
     return [dataset]
 
 

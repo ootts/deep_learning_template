@@ -2,7 +2,9 @@ model:
   meta_architecture: LeNet5
 datasets:
   train: ("MNIST_TRAIN",)
-  test: ("MNIST_TEST",)
+  test: "MNIST_TEST"
+dataloader:
+  num_workers: 4
 input:
   do_normalize: False
   min_size_train: (28,)

@@ -27,7 +27,7 @@ _C.input.hue = 0.0
 
 _C.datasets = CN()
 _C.datasets.train = ()
-_C.datasets.test = ()
+_C.datasets.test = ""
 
 _C.dataloader = CN()
 _C.dataloader.num_workers = 0
