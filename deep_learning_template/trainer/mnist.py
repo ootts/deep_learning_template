@@ -4,10 +4,6 @@ import time
 from dl_ext.average_meter import AverageMeter
 from dl_ext.pytorch_ext.dist import *
 from termcolor import colored
-from torch import nn
-from torch.optim.lr_scheduler import _LRScheduler
-from torch.optim.optimizer import Optimizer
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from deep_learning_template.trainer.base import BaseTrainer
@@ -15,13 +11,8 @@ from .utils import *
 
 
 class MnistTrainer(BaseTrainer):
-    def __init__(self, model: nn.Module, train_dl: DataLoader, valid_dl: DataLoader, num_epochs: int,
-                 loss_function: callable, optimizer: Optimizer, scheduler: _LRScheduler = None,
-                 output_dir: str = 'models', max_lr: float = 1e-2, save_every: bool = False,
-                 metric_functions: dict = None, logger=None):
-
-        super().__init__(model, train_dl, valid_dl, num_epochs, loss_function, optimizer, scheduler, output_dir, max_lr,
-                         save_every, metric_functions, logger)
+    def __init__(self, cfg):
+        super().__init__(cfg)
         self.best_val_acc = 0.0
 
     @torch.no_grad()

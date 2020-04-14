@@ -2,7 +2,8 @@ import os
 
 
 class DatasetCatalog(object):
-    DATA_DIR = os.path.join(os.environ['HOME'], 'Datasets')
+    default_data_dir = os.path.expanduser('~/Datasets')
+    DATA_DIR = os.environ.get('DATASET_HOME', default_data_dir)
     DATASETS = {
         "MNIST_TRAIN": {
             "root": "mnist",
@@ -14,7 +15,14 @@ class DatasetCatalog(object):
             "train": False,
             "download": True
         },
-
+        "CIFAR10_TRAIN": {
+            "root": "cifar10",
+            "train": True,
+        },
+        "CIFAR10_TEST": {
+            "root": "cifar10",
+            "train": False,
+        }
     }
 
     @staticmethod
@@ -25,6 +33,14 @@ class DatasetCatalog(object):
             attrs['root'] = root
             return dict(
                 factory='MNIST',
+                args=attrs
+            )
+        if name in ['CIFAR10_TRAIN','CIFAR10_TEST']:
+            attrs = DatasetCatalog.DATASETS[name]
+            root = os.path.join(DatasetCatalog.DATA_DIR, attrs['root'])
+            attrs['root'] = root
+            return dict(
+                factory='CIFAR10',
                 args=attrs
             )
         raise RuntimeError("Dataset not available: {}".format(name))

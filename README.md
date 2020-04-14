@@ -30,39 +30,75 @@ trainer.find_lr()
 ## Training and inference example for MNIST 
 1. Find learning-rate.
 ```bash
-CUDA_VISIBLE_DEVICES=0 python train_net.py --config-file configs/mnist/defaults.yaml --mode findlr
+python train_net.py --config-file configs/mnist/defaults.yaml --mode findlr
 ```
 
 2. Training.
 ```bash
 # single gpu
-CUDA_VISIBLE_DEVICES=0 python train_net.py --config-file configs/mnist/defaults.yaml
+python train_net.py --config-file configs/mnist/defaults.yaml --num-gpus 1
 ```
 ```bash
 # multi-gpu distributed training.
-CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nproc_per_node 4 train_net.py --config-file configs/mnist/defaults.yaml
+python train_net.py --config-file configs/mnist/defaults.yaml --num-gpus 4
 ```
 2. Inference and evaluation.
 ```bash
 # single gpu
-CUDA_VISIBLE_DEVICES=0 python train_net.py --config-file configs/mnist/defaults.yaml --mode eval
+python train_net.py --config-file configs/mnist/defaults.yaml --mode eval --num-gpus 1
 ```
 ```bash
 # multi-gpu distributed inference.
-CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nproc_per_node 4 train_net.py --config-file configs/mnist/defaults.yaml --mode eval
+python train_net.py --config-file configs/mnist/defaults.yaml --mode eval --num-gpus 4
 ```
 
 ## Extend by your own dataset.
 
+1. Configs
 
-## Citations
-This project is inspired by maskrcnn-benchmark.
-```
-@misc{massa2018mrcnn,
-author = {Massa, Francisco and Girshick, Ross},
-title = {{maskrcnn-benchmark: Fast, modular reference implementation of Instance Segmentation and Object Detection algorithms in PyTorch}},
-year = {2018},
-howpublished = {\url{https://github.com/facebookresearch/maskrcnn-benchmark}},
-note = {Accessed: [Insert date here]}
-}
-```
+2. Dataset
+
+   1. Override torch.utils.dataset.Dataset
+
+      Create a new Python file in deep_learning_template/data/datasets.
+
+      The dataset must accept ds_len and transforms as parameter at least.
+
+   2. Register
+
+      Add in deep_learning_template/data/datasets/\__init__.py
+
+   3. Define in PathCatalog:deep_learning_template/config/paths_catalog.py
+
+      Add in **DATASET**.
+
+      Add in **get** method.
+
+3. Trainer
+
+   Add a new file in deep_learning_template/trainer.
+
+   Register in deep_learning_template/trainer/build.py
+
+4. Loss
+
+   Define in deep_learning_template/loss/build.py
+
+5. Metrics
+
+   Add new file in deep_learning_template/metric.
+
+   Register in deep_learning_template/metric/build.py
+
+6. Model
+
+   Add new file in deep_learning_template/modeling/models.
+
+   Register in deep_learning_template/modeling/models/models.py
+
+   All models must accept cfg as parameter only.
+
+7. Evaluator
+
+   Define in deep_learning_template/evaluators/build.py
+

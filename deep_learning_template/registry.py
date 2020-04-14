@@ -1,4 +1,4 @@
-from disprcnn2.utils.registry import Registry
+from deep_learning_template.utils.registry import Registry
 
 BATCH_COLLATORS = Registry()
 LOSS_FUNCTIONS = Registry()

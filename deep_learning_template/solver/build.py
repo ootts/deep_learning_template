@@ -39,5 +39,13 @@ def make_lr_scheduler(cfg, optimizer, max_iter):
             cfg.solver.max_lr,
             max_iter
         )
+    elif name == "WarmupCosineLR":
+        return WarmupCosineLR(
+            optimizer,
+            cfg.SOLVER.MAX_ITER,
+            warmup_factor=cfg.SOLVER.WARMUP_FACTOR,
+            warmup_iters=cfg.SOLVER.WARMUP_ITERS,
+            warmup_method=cfg.SOLVER.WARMUP_METHOD,
+        )
     else:
         raise NotImplementedError()

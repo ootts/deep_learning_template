@@ -15,43 +15,40 @@ from termcolor import colored
 from torch import nn
 from torch.nn import DataParallel
 from torch.nn.parallel import DistributedDataParallel
-from torch.optim.lr_scheduler import _LRScheduler
-from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 
 from deep_learning_template.data.samplers.ordered_distributed_sampler import OrderedDistributedSampler
 from .utils import *
+from ..data import make_data_loader
+from ..loss.build import build_loss_function
+from ..metric.build import build_metric_functions
+from ..modeling.models import build_model
+from ..solver.build import make_optimizer, make_lr_scheduler
 
 
 class BaseTrainer:
 
-    def __init__(self, model: nn.Module, train_dl: DataLoader, valid_dl: DataLoader, num_epochs: int,
-                 loss_function: callable, optimizer: Optimizer, scheduler: _LRScheduler = None,
-                 output_dir: str = 'models', max_lr: float = 1e-2, save_every: bool = False,
-                 metric_functions: dict = None, logger=None):
-        self.loss_function = loss_function
-        self.train_dl = train_dl
-        self.valid_dl = valid_dl
-        self.output_dir = output_dir
-        os.makedirs(output_dir, exist_ok=True)
-        self.num_epochs = num_epochs
+    def __init__(self, cfg):
+        self.model: nn.Module = build_model(cfg).to(torch.device(cfg.model.device))
+        self.loss_function = build_loss_function(cfg)
+        self.train_dl = make_data_loader(cfg, is_train=True)
+        self.valid_dl = make_data_loader(cfg, is_train=False)
+        self.output_dir = cfg.output_dir
+        self.num_epochs = cfg.solver.num_epochs
         self.begin_epoch = 0
-        self.max_lr = max_lr
-        self.save_every = save_every
-        self.state = TrainerState.BASE
-        self.optimizer = optimizer
-        self.scheduler = scheduler
-        self.model: nn.Module = model
-        if metric_functions is None:
-            metric_functions = {}
-        self.metric_functions = metric_functions
+        self.max_lr = cfg.solver.max_lr
+        self.save_every = cfg.solver.save_every
+        self.optimizer = make_optimizer(cfg, self.model)
+        self.scheduler = make_lr_scheduler(cfg, self.optimizer,
+                                           cfg.solver.num_epochs * len(self.train_dl))
+        self.metric_functions = build_metric_functions(cfg)
+        self.cfg = cfg
         self._tb_writer = None
+        self.state = TrainerState.BASE
         self.global_steps = 0
         self.best_val_loss = 100000
-        if logger is None:
-            logger = self._setup_logger()
-        self.logger = logger
+        self.logger = self._setup_logger()
 
     def train(self, epoch):
         loss_meter = AverageMeter()
@@ -411,3 +408,11 @@ class BaseTrainer:
         if self._tb_writer is None and is_main_process():
             self._tb_writer = SummaryWriter(self.output_dir, flush_secs=20)
         return self._tb_writer
+
+    def resume(self):
+        if self.cfg.solver.load_model != '':
+            self.logger.info('loading model from %s' % self.cfg.solver.load_model)
+            self.load_model(self.cfg.solver.load_model)
+        if self.cfg.solver.load != '':
+            self.logger.info('loading checkpoint from %s' % self.cfg.solver.load)
+            self.load(self.cfg.solver.load)

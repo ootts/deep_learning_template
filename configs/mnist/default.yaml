@@ -2,7 +2,7 @@ model:
   meta_architecture: LeNet5
 datasets:
   train: ("MNIST_TRAIN",)
-  test: "MNIST_TEST"
+  test: MNIST_TEST
 dataloader:
   num_workers: 4
 input:
@@ -12,11 +12,11 @@ input:
   min_size_test: 28
   max_size_test: 28
 solver:
-  loss_function: "cross_entropy_loss"
+  loss_function: cross_entropy_loss
   metric_functions: ("accuracy",)
   batch_size: 128
-  epochs: 10
+  num_epochs: 10
   trainer: mnist
 test:
   batch_size: 128
-  evaluator: "mnist"
+  evaluator: mnist

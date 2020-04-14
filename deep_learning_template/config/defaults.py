@@ -7,9 +7,6 @@ _C.model = CN()
 _C.model.device = "cuda"
 _C.model.meta_architecture = "GeneralizedRCNN"
 
-_C.model.load_model = ""
-_C.model.load = ""
-
 _C.input = CN()
 _C.input.min_size_train = (600,)
 _C.input.max_size_train = 2000
@@ -34,7 +31,7 @@ _C.dataloader.num_workers = 0
 _C.dataloader.collator = 'DefaultBatchCollator'
 
 _C.solver = CN()
-_C.solver.epochs = 1
+_C.solver.num_epochs = 1
 _C.solver.max_lr = 0.01
 _C.solver.bias_lr_factor = 2
 _C.solver.momentum = 0.9
@@ -55,6 +52,8 @@ _C.solver.loss_function = ''
 _C.solver.save_every = False
 _C.solver.metric_functions = ('',)
 _C.solver.trainer = "base"
+_C.solver.load_model = ""
+_C.solver.load = ""
 
 _C.test = CN()
 _C.test.batch_size = 2
