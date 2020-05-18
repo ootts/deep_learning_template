@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.models.resnet import resnet50
 
 
 class BasicBlock(nn.Module):
@@ -98,7 +99,10 @@ def ResNet34(cfg):
 
 
 def ResNet50(cfg):
-    return ResNet(Bottleneck, [3, 4, 6, 3])
+    resnet = resnet50(cfg.model.resnet.pretrained)
+    if cfg.model.resnet.num_classes != resnet.fc.out_features:
+        resnet.fc = nn.Linear(resnet.fc.in_features, cfg.model.resnet.num_classes)
+    return resnet
 
 
 def ResNet101(cfg):

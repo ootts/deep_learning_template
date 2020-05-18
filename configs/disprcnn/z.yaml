@@ -1,0 +1,24 @@
+model:
+  meta_architecture: ResNet50
+  resnet:
+    num_classes: 5
+datasets:
+  train: ("KITTI_ROI_Z_TRAIN",)
+  test: "KITTI_ROI_Z_VAL"
+dataloader:
+  num_workers: 4
+input:
+  do_normalize: True
+  min_size_train: (224,)
+  max_size_train: 224
+  min_size_test: 224
+  max_size_test: 224
+solver:
+  loss_function: "smooth_l1_loss"
+  metric_functions: ()
+  batch_size: 32
+  num_epochs: 10
+  trainer: base
+test:
+  batch_size: 8
+  evaluator: "disprcnn_z"

@@ -22,7 +22,15 @@ class DatasetCatalog(object):
         "CIFAR10_TEST": {
             "root": "cifar10",
             "train": False,
-        }
+        },
+        "KITTI_ROI_Z_TRAIN": {
+            "root": "/home/linghao/Datasets/kitti/object/training/roi_z",
+            "split": 'train'
+        },
+        "KITTI_ROI_Z_VAL": {
+            "root": "/home/linghao/Datasets/kitti/object/training/roi_z",
+            "split": 'val'
+        },
     }
 
     @staticmethod
@@ -35,12 +43,20 @@ class DatasetCatalog(object):
                 factory='MNIST',
                 args=attrs
             )
-        if name in ['CIFAR10_TRAIN','CIFAR10_TEST']:
+        if name in ['CIFAR10_TRAIN', 'CIFAR10_TEST']:
             attrs = DatasetCatalog.DATASETS[name]
             root = os.path.join(DatasetCatalog.DATA_DIR, attrs['root'])
             attrs['root'] = root
             return dict(
                 factory='CIFAR10',
+                args=attrs
+            )
+        if name in ['KITTI_ROI_Z_TRAIN', 'KITTI_ROI_Z_VAL']:
+            attrs = DatasetCatalog.DATASETS[name]
+            root = os.path.join(DatasetCatalog.DATA_DIR, attrs['root'])
+            attrs['root'] = root
+            return dict(
+                factory='ROI_Z_DS',
                 args=attrs
             )
         raise RuntimeError("Dataset not available: {}".format(name))
