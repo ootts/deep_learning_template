@@ -16,8 +16,8 @@ input:
 solver:
   loss_function: "smooth_l1_loss"
   metric_functions: ()
-  batch_size: 32
-  num_epochs: 10
+  batch_size: 64
+  num_epochs: 100
   trainer: base
 test:
   batch_size: 8

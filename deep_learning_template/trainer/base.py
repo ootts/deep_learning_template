@@ -386,7 +386,7 @@ class BaseTrainer:
             self.model.load_state_dict(d)
 
     def _setup_logger(self):
-        logger = logging.getLogger()
+        logger = logging.getLogger(self.__class__.__name__)
         logger.setLevel(logging.DEBUG)
         # don't log results for the non-master process
         if get_rank() > 0:
