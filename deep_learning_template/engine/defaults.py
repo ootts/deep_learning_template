@@ -9,14 +9,14 @@ from deep_learning_template.utils.miscellaneous import save_config
 
 def default_argument_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config-file", default="", metavar="FILE", help="path to config file")
+    parser.add_argument("--config-file", '-c', default="", metavar="FILE", help="path to config file")
     parser.add_argument("--mode", default="train", choices=['train', 'eval', 'findlr'])
     parser.add_argument(
         "--resume",
         action="store_true",
         help="whether to attempt to resume from the checkpoint directory",
     )
-    parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
+    parser.add_argument("--num-gpus", '--gpus', type=int, default=1, help="number of gpus *per machine*")
 
     port = 2 ** 15 + 2 ** 14 + hash(os.getuid() if sys.platform != "win32" else 1) % 2 ** 14
     parser.add_argument(

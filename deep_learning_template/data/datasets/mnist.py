@@ -6,7 +6,7 @@ import torch
 from PIL import Image
 from torchvision.datasets import VisionDataset
 from torchvision.datasets.mnist import read_image_file, read_label_file
-from torchvision.datasets.utils import download_and_extract_archive, makedir_exist_ok
+from torchvision.datasets.utils import download_and_extract_archive
 
 
 class MNIST(VisionDataset):
@@ -108,8 +108,8 @@ class MNIST(VisionDataset):
         if self._check_exists():
             return
 
-        makedir_exist_ok(self.raw_folder)
-        makedir_exist_ok(self.processed_folder)
+        os.makedirs(self.raw_folder, exist_ok=True)
+        os.makedirs(self.processed_folder, exist_ok=True)
 
         # download files
         for url in self.urls:

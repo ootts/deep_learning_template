@@ -47,12 +47,20 @@ _C.solver.warmup_iters = 500
 _C.solver.warmup_method = "linear"
 _C.solver.optimizer = 'Adam'
 _C.solver.scheduler = 'OneCycleScheduler'
-_C.solver.do_grad_clip = True
+_C.solver.do_grad_clip = False
+_C.solver.grad_clip_type = 'norm'  # norm or value
 _C.solver.grad_clip = 1.0
 _C.solver.ds_len = -1
 _C.solver.batch_size = 2
 _C.solver.loss_function = ''
+_C.solver.skip_validation = False
 _C.solver.save_every = False
+_C.solver.save_freq = 1
+_C.solver.save_mode = 'epoch'  # epoch or iteration
+# save model config:
+# save_every: False --->save model when smaller val loss is detected.
+# save_every: True, save_mode: epoch --->save model when epoch % save_freq==0
+# save_every: True, save_mode: iteration --->save model when epoch % save_freq==0
 _C.solver.metric_functions = ()
 _C.solver.trainer = "base"
 _C.solver.load_model = ""
@@ -60,7 +68,14 @@ _C.solver.load = ""
 
 _C.test = CN()
 _C.test.batch_size = 2
-_C.test.evaluator = ''
+_C.test.evaluators = ['']
+_C.test.visualizer = 'default'
+_C.test.force_recompute = True
+_C.test.skip_evaluation = False
+_C.test.skip_visualization = True
+_C.test.eval_all = False
+_C.test.aggregate = True
+# _C.test.eval_with_target = False
 
 _C.output_dir = ''
 

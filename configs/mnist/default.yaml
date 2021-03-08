@@ -16,7 +16,7 @@ solver:
   metric_functions: ("accuracy",)
   batch_size: 128
   num_epochs: 10
-  trainer: mnist
+  trainer: base
 test:
   batch_size: 128
-  evaluator: mnist
+  evaluators: ('mnist',)

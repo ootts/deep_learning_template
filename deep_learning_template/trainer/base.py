@@ -1,3 +1,4 @@
+import os.path as osp
 import logging
 import math
 import os
@@ -6,9 +7,12 @@ import time
 
 import matplotlib.pyplot as plt
 import numpy as np
+from torch.nn.utils import clip_grad_norm_, clip_grad_value_
+
 from dl_ext.average_meter import AverageMeter
 from dl_ext.pytorch_ext.dist import *
 from dl_ext.pytorch_ext.optim import OneCycleScheduler, LRFinder
+
 from matplotlib import axes, figure
 from tensorboardX import SummaryWriter
 from termcolor import colored
@@ -25,6 +29,7 @@ from ..loss.build import build_loss_function
 from ..metric.build import build_metric_functions
 from ..modeling.models import build_model
 from ..solver.build import make_optimizer, make_lr_scheduler
+from ..utils.tb_utils import get_summary_writer
 
 
 class BaseTrainer:
@@ -38,7 +43,12 @@ class BaseTrainer:
         self.num_epochs = cfg.solver.num_epochs
         self.begin_epoch = 0
         self.max_lr = cfg.solver.max_lr
+        self.skip_validation = cfg.solver.skip_validation
         self.save_every = cfg.solver.save_every
+        if self.skip_validation and not self.save_every:
+            raise RuntimeError('model must be save every [epoch/iteration] when validation is skipped.')
+        self.save_mode = cfg.solver.save_mode
+        self.save_freq = cfg.solver.save_freq
         self.optimizer = make_optimizer(cfg, self.model)
         self.scheduler = make_lr_scheduler(cfg, self.optimizer,
                                            cfg.solver.num_epochs * len(self.train_dl))
@@ -48,6 +58,7 @@ class BaseTrainer:
         self.state = TrainerState.BASE
         self.global_steps = 0
         self.best_val_loss = 100000
+        self.val_loss = 100000
         self.logger = self._setup_logger()
 
     def train(self, epoch):
@@ -65,6 +76,11 @@ class BaseTrainer:
             loss = self.loss_function(output, y)
             loss = loss.mean()
             loss.backward()
+            if self.cfg.solver.do_grad_clip:
+                if self.cfg.solver.grad_clip_type == 'norm':
+                    clip_grad_norm_(self.model.parameters(), self.cfg.solver.grad_clip)
+                else:
+                    clip_grad_value_(self.model.parameters(), self.cfg.solver.grad_clip)
             self.optimizer.step()
             if self.scheduler is not None and isinstance(self.scheduler, OneCycleScheduler):
                 self.scheduler.step()
@@ -87,6 +103,8 @@ class BaseTrainer:
                     bar_vals[k] = metric_ams[k].avg
                 bar.set_postfix(bar_vals)
             self.global_steps += 1
+            if self.global_steps % self.save_freq == 0:
+                self.try_to_save(epoch, 'iteration')
         torch.cuda.synchronize()
         epoch_time = format_time(time.time() - begin)
         if is_main_process():
@@ -147,95 +165,73 @@ class BaseTrainer:
         for epoch in range(self.begin_epoch, num_epochs):
             self.train(epoch)
             synchronize()
-            val_loss = self.val(epoch)
-            synchronize()
-            if is_main_process():
-                if self.save_every:
-                    self.save(epoch)
-                elif val_loss < self.best_val_loss:
-                    self.logger.info(
-                        colored('Better model found at epoch %d with val_loss %.4f.' % (epoch, val_loss), 'red'))
-                    self.best_val_loss = val_loss
-                    self.save(epoch)
+            if not self.skip_validation:
+                self.val_loss = self.val(epoch)
+                synchronize()
+            self.try_to_save(epoch, 'epoch')
+            # if is_main_process():
+            #     if self.save_every and (
+            #             self.save_mode == 'epoch' and epoch % self.cfg.solver.save_freq == 0 or epoch == num_epochs - 1):
+            #         self.save(epoch)
+            #     elif val_loss < self.best_val_loss:
+            #         self.logger.info(
+            #             colored('Better model found at epoch %d with val_loss %.4f.' % (epoch, val_loss), 'red'))
+            #         self.best_val_loss = val_loss
+            #         self.save(epoch)
             synchronize()
         if is_main_process():
             self.logger.info('Training finished. Total time %s' % (format_time(time.time() - begin)))
 
     @torch.no_grad()
-    def get_preds(self, dataset='valid', with_target=False):
-        if get_world_size() > 1:
-            return self.get_preds_dist(dataset, with_target)
-        self.model.eval()
-        assert dataset in ['train', 'valid']
-        if dataset == 'train':
-            ordered_train_dl = DataLoader(self.train_dl.dataset, self.train_dl.batch_size, shuffle=False,
-                                          sampler=None, num_workers=self.train_dl.num_workers,
-                                          collate_fn=self.train_dl.collate_fn, pin_memory=self.train_dl.pin_memory,
-                                          timeout=self.train_dl.timeout, worker_init_fn=self.train_dl.worker_init_fn)
-            bar = tqdm(ordered_train_dl)
+    def get_preds(self):
+        prediction_path = osp.join(self.cfg.output_dir, 'inference', self.cfg.datasets.test, 'predictions.pth')
+        if not self.cfg.test.force_recompute and osp.exists(prediction_path):
+            self.logger.info(colored(f'predictions found at {prediction_path}, skip recomputing.', 'red'))
+            outputs = torch.load(prediction_path)
         else:
-            ordered_valid_dl = DataLoader(self.valid_dl.dataset, self.valid_dl.batch_size, shuffle=False,
-                                          sampler=None, num_workers=self.valid_dl.num_workers,
-                                          collate_fn=self.valid_dl.collate_fn, pin_memory=self.valid_dl.pin_memory,
-                                          timeout=self.valid_dl.timeout, worker_init_fn=self.valid_dl.worker_init_fn)
-            bar = tqdm(ordered_valid_dl)
-        outputs = []
-        targets = []
-        for batch in bar:
-            x, y = batch_gpu(batch)
-            output = self.model(x)
-            output = to_cpu(output)
-            outputs.append(output)
-            if with_target:
-                targets.append(to_cpu(y))
-        outputs = torch.cat(outputs)
-        if with_target:
-            targets = torch.cat(targets)
-            return outputs, targets
-        else:
-            return outputs
+            if get_world_size() > 1:
+                outputs = self.get_preds_dist()
+            else:
+                self.model.eval()
+                ordered_valid_dl = DataLoader(self.valid_dl.dataset, self.valid_dl.batch_size, shuffle=False,
+                                              sampler=None, num_workers=self.valid_dl.num_workers,
+                                              collate_fn=self.valid_dl.collate_fn, pin_memory=self.valid_dl.pin_memory,
+                                              timeout=self.valid_dl.timeout,
+                                              worker_init_fn=self.valid_dl.worker_init_fn)
+                bar = tqdm(ordered_valid_dl)
+                outputs = []
+                for batch in bar:
+                    x, y = batch_gpu(batch)
+                    output = self.model(x)
+                    output = to_cpu(output)
+                    outputs.append(output)
+                outputs = torch.cat(outputs)
+            os.makedirs(osp.dirname(prediction_path), exist_ok=True)
+            torch.save(outputs, prediction_path)
+        return outputs
 
     @torch.no_grad()
-    def get_preds_dist(self, dataset='valid', with_target=False):
+    def get_preds_dist(self):
         self.model.eval()
-        if dataset == 'train':
-            train_sampler = OrderedDistributedSampler(self.train_dl.dataset, get_world_size(), rank=get_rank())
-            ordered_dist_train_dl = DataLoader(self.train_dl.dataset, self.train_dl.batch_size, shuffle=False,
-                                               sampler=train_sampler, num_workers=self.train_dl.num_workers,
-                                               collate_fn=self.train_dl.collate_fn, pin_memory=self.train_dl.pin_memory,
-                                               timeout=self.train_dl.timeout,
-                                               worker_init_fn=self.train_dl.worker_init_fn)
-            bar = tqdm(ordered_dist_train_dl) if is_main_process() else ordered_dist_train_dl
-        else:
-            valid_sampler = OrderedDistributedSampler(self.valid_dl.dataset, get_world_size(), rank=get_rank())
-            ordered_dist_valid_dl = DataLoader(self.valid_dl.dataset, self.valid_dl.batch_size, shuffle=False,
-                                               sampler=valid_sampler, num_workers=self.valid_dl.num_workers,
-                                               collate_fn=self.valid_dl.collate_fn, pin_memory=self.valid_dl.pin_memory,
-                                               timeout=self.valid_dl.timeout,
-                                               worker_init_fn=self.valid_dl.worker_init_fn)
-            bar = tqdm(ordered_dist_valid_dl) if is_main_process() else ordered_dist_valid_dl
+        valid_sampler = OrderedDistributedSampler(self.valid_dl.dataset, get_world_size(), rank=get_rank())
+        ordered_dist_valid_dl = DataLoader(self.valid_dl.dataset, self.valid_dl.batch_size, shuffle=False,
+                                           sampler=valid_sampler, num_workers=self.valid_dl.num_workers,
+                                           collate_fn=self.valid_dl.collate_fn, pin_memory=self.valid_dl.pin_memory,
+                                           timeout=self.valid_dl.timeout,
+                                           worker_init_fn=self.valid_dl.worker_init_fn)
+        bar = tqdm(ordered_dist_valid_dl) if is_main_process() else ordered_dist_valid_dl
         outputs = []
-        targets = []
         for batch in bar:
             x, y = batch_gpu(batch)
             output = self.model(x)
             output = to_cpu(output)
             outputs.append(output)
-            if with_target:
-                targets.append(to_cpu(y))
         outputs = torch.cat(outputs)
         all_outputs = all_gather(outputs)
-        if with_target:
-            targets = torch.cat(targets)
-            all_targets = all_gather(targets)
         if not is_main_process():
             return
         all_outputs = torch.cat(all_outputs, dim=0).cpu()[:len(self.valid_dl.dataset)]
-        if with_target:
-            all_targets = torch.cat(all_targets, dim=0).cpu()[:len(self.valid_dl.dataset)]
-            return all_outputs, all_targets
-        else:
-            return all_outputs
+        return all_outputs
 
     def to_base(self):
         if self.state == TrainerState.BASE:
@@ -268,9 +264,11 @@ class BaseTrainer:
             self.scheduler.step_size_up //= world_size
             self.scheduler.step_size_down //= world_size
 
-    def to_distributed(self):
+    def to_distributed(self, convert_sync_batchnorm=True):
         assert dist.is_available() and dist.is_initialized()
         local_rank = dist.get_rank()
+        if convert_sync_batchnorm:
+            self.model = nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
         self.model = DistributedDataParallel(self.model, [local_rank],
                                              output_device=local_rank,
                                              broadcast_buffers=False)
@@ -356,13 +354,17 @@ class BaseTrainer:
         self.scheduler = self.old_scheduler
 
     def save(self, epoch):
-        name = os.path.join(self.output_dir, str(epoch) + '.pth')
+        if self.save_mode == 'epoch':
+            name = os.path.join(self.output_dir, 'model_epoch_%06d.pth' % epoch)
+        else:
+            name = os.path.join(self.output_dir, 'model_iteration_%06d.pth' % self.global_steps)
         net_sd = self.model.module.state_dict() if hasattr(self.model, 'module') else self.model.state_dict()
         d = {'model': net_sd,
              'optimizer': self.optimizer.state_dict(),
              'scheduler': self.scheduler.state_dict(),
              'epoch': epoch,
-             'best_val_loss': self.best_val_loss}
+             'best_val_loss': self.best_val_loss,
+             'global_steps': self.global_steps}
         torch.save(d, name)
 
     def load(self, name):
@@ -377,6 +379,8 @@ class BaseTrainer:
         self.scheduler.load_state_dict(d['scheduler'])
         self.begin_epoch = d['epoch']
         self.best_val_loss = d['best_val_loss']
+        if 'global_steps' in d:  # compat
+            self.global_steps = d['global_steps']
 
     def load_model(self, name):
         d = torch.load(name, 'cpu')
@@ -406,13 +410,36 @@ class BaseTrainer:
     @property
     def tb_writer(self):
         if self._tb_writer is None and is_main_process():
-            self._tb_writer = SummaryWriter(self.output_dir, flush_secs=20)
+            self._tb_writer = get_summary_writer(self.output_dir, flush_secs=20)
         return self._tb_writer
 
     def resume(self):
+        if self.cfg.solver.load == '' and self.cfg.solver.load_model == '':
+            self.logger.warning('try to resume without loading anything!')
         if self.cfg.solver.load_model != '':
-            self.logger.info('loading model from %s' % self.cfg.solver.load_model)
+            self.logger.info(colored('loading model from %s' % self.cfg.solver.load_model, 'red'))
             self.load_model(self.cfg.solver.load_model)
         if self.cfg.solver.load != '':
-            self.logger.info('loading checkpoint from %s' % self.cfg.solver.load)
+            self.logger.info(colored('loading checkpoint from %s' % self.cfg.solver.load, 'red'))
             self.load(self.cfg.solver.load)
+
+    def try_to_save(self, epoch, flag):
+        if not is_main_process():
+            return
+        if self.skip_validation:
+            # validation is not performed, must save every epoch/iteration
+            assert self.save_every
+            if flag == self.save_mode:
+                self.save(epoch)
+        else:
+            # validation is performed, can save according to val_loss or every epoch
+            if self.save_every:
+                # save every x epochs
+                assert self.save_mode == 'epoch'
+                if epoch % self.save_freq == 0 or epoch == self.num_epochs - 1:
+                    self.save(epoch)
+            if self.val_loss < self.best_val_loss:
+                self.logger.info(
+                    colored('Better model found at epoch'
+                            ' %d with val_loss %.4f.' % (epoch, self.val_loss), 'red'))
+                self.save(epoch)

@@ -39,5 +39,8 @@ def cifar10_evaluator(cfg):
     return CIFAR10Evaluator(cfg)
 
 
-def build_evaluator(cfg):
-    return EVALUATORS[cfg.test.evaluator](cfg)
+def build_evaluators(cfg):
+    evaluators = []
+    for e in cfg.test.evaluators:
+        evaluators.append(EVALUATORS[e](cfg))
+    return evaluators

@@ -1,8 +1,8 @@
 import os
+
 from deep_learning_template.config import cfg
 from deep_learning_template.engine.defaults import default_argument_parser, default_setup
 from deep_learning_template.engine.launch import launch
-from deep_learning_template.evaluators.build import build_evaluator
 from deep_learning_template.trainer.build import build_trainer
 from deep_learning_template.utils.comm import get_world_size
 
@@ -38,19 +38,17 @@ def main_func(args):
     distributed = world_size > 1
     cfg = setup(args)
     trainer = build_trainer(cfg)
-    if args.mode == 'eval' or (args.mode == 'train' and args.resume):
+    if args.resume:
         trainer.resume()
     if distributed:
         trainer.to_distributed()
     if args.mode == 'train':
         trainer.fit()
-    elif args.mode == 'eval':
-        preds = trainer.get_preds()
-        evaluator = build_evaluator(cfg)
-        evaluator(preds, trainer.valid_dl.dataset)
-    else:
+    elif args.mode == 'findlr':
         trainer.to_base()
         trainer.find_lr()
+    else:
+        raise NotImplementedError()
 
 
 if __name__ == "__main__":
